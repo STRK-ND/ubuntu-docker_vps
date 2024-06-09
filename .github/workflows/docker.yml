@@ -1,30 +1,47 @@
-name: Run Docker Container
+name: Build and Run Ubuntu 22.04 Docker VPS
 
 on:
   push:
     branches:
       - main
-  workflow_dispatch:
 
 jobs:
-  run-docker:
+  build-and-run:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v2
+    - name: Checkout repository
+      uses: actions/checkout@v2
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
+    - name: Clone Ubuntu 22.04 Docker VPS
+      run: |
+        git clone https://github.com/dev-bon/ubuntu-docker-vps.git
+        cd ubuntu-docker-vps
 
-      - name: Login to Docker Hub
-        uses: docker/login-action@v2
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
+    - name: Build Ubuntu 22.04 Docker VPS
+      run: |
+        cd ubuntu-docker-vps
+        docker build -t ubuntu-vps -f Dockerfile .
 
-      - name: Build Docker image
-        run: docker build -t vps_ubuntu:latest .
+    - name: Run Ubuntu 22.04 Docker VPS
+      run: |
+        docker run -d --name ubuntu-vps --privileged --cap-add=ALL -p 2222:22 -p 8080:8080 -p 9090:9090 ubuntu-vps
 
-      - name: Run Docker container
-        run: docker run -d -p 8000:8000 --name vps_ubuntu vps_ubuntu:latest
+    - name: Get container ID
+      id: container_id
+      run: echo "::set-output name=id::$(docker ps -q -f name=ubuntu-vps)"
+
+    - name: Install SSH Server in Container
+      run: |
+        docker exec ${{ steps.container_id.outputs.id }} apt-get update
+        docker exec ${{ steps.container_id.outputs.id }} apt-get install -y openssh-server
+        docker exec ${{ steps.container_id.outputs.id }} service ssh start
+
+    - name: Configure SSH Access
+      run: |
+        docker exec ${{ steps.container_id.outputs.id }} mkdir -p /root/.ssh
+        echo "${{ secrets.SSH_PUBLIC_KEY }}" | docker exec -i ${{ steps.container_id.outputs.id }} sh -c 'cat >> /root/.ssh/authorized_keys'
+
+    - name: Display Container SSH Info
+      run: |
+        echo "SSH into the container with: ssh -p 2222 root@<github-runner-ip>"
