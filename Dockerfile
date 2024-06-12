@@ -1,17 +1,22 @@
-# Use an official Python runtime as a parent image
-FROM python:3.9-slim
+FROM ubuntu:jammy
 
-# Set the working directory in the container
-WORKDIR /app
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=Asia/Manila
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+RUN echo 'root:root' | chpasswd
+RUN printf '#!/bin/sh\nexit 0' > /usr/sbin/policy-rc.d
+RUN apt-get update -y
+RUN apt-get install -y systemd systemd-sysv dbus dbus-user-session openssh-server sudo wget tzdata keyboard-configuration
+RUN rm /etc/apt/apt.conf.d/docker-gzip-indexes
+RUN apt-get purge apt-show-versions
+RUN rm /var/lib/apt/lists/*lz4
+RUN apt-get -o Acquire::GzipIndexes=false update
+RUN mkdir /mktemp
+RUN apt-cache dumpavail > /mktemp/temp
+RUN dpkg --merge-avail /mktemp/temp
+RUN rm -rf mktemp
+RUN wget https://raw.githubusercontent.com/dev-bon/ubuntu-docker-vps/main/pkg-list
+RUN dpkg --set-selections < pkg-list
+RUN apt-get dselect-upgrade -y
 
-# Copy the current directory contents into the container at /app
-COPY . /app
-
-# Install any needed packages specified in requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Make port 8000 available to the world outside this container
-EXPOSE 8000
-
-# Run app.py when the container launches
-CMD ["python", "app.py"]
+ENTRYPOINT ["/sbin/init"]
